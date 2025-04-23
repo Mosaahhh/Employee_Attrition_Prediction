@@ -1,4 +1,3 @@
-app.title = "Employee Attrition Prediction"
 import dash
 from dash import html, dcc, Input, Output, State
 import pandas as pd
