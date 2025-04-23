@@ -6,7 +6,7 @@ import numpy as np
 import dash_bootstrap_components as dbc
 
 # Load your trained model and scaler
-model = joblib.load("artifacts/logic_regression_model.pkl")
+model = joblib.load("artifacts/logistic_regression_model.pkl")
 scaler = joblib.load("artifacts/scaler.pkl")
 
 # Initialize the app
