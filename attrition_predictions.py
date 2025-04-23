@@ -1,90 +1,174 @@
+app.title = "Employee Attrition Prediction"
 import dash
-from dash import dcc, html, Input, Output, State, dash_table
-import base64
-import io
+from dash import html, dcc, Input, Output, State
 import pandas as pd
 import joblib
-import plotly.express as px
+import numpy as np
 import dash_bootstrap_components as dbc
 
-# Load trained model and scaler
-model = joblib.load("artifacts/logistic_regression_model.pkl")
-scaler = joblib.load("artifacts/scaler.pkl")
-feature_importance_df = pd.read_csv("artifacts/feature_importance.csv")
-trained_features = feature_importance_df["Feature"].tolist()
+# Load your trained model and scaler
+model = joblib.load("logic_regression_model.pkl")
+scaler = joblib.load("scaler.pkl")
 
-# Dash app setup
+# Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
+server = app.server  # for deployment on Render
 app.title = "Employee Attrition Prediction"
 
+# Layout
 app.layout = dbc.Container([
-    html.H2("Employee Attrition Predictor", className="text-center my-4"),
-    dcc.Upload(
-        id='upload-data',
-        children=html.Div([
-            'Drag and Drop or ',
-            html.A('Select CSV File')
+    html.H1("Employee Attrition Predictor", className="text-center my-4"),
+
+    dbc.Row([
+        dbc.Col([
+            dbc.Label("Age"),
+            dcc.Input(id="input-age", type="number", placeholder="e.g. 35", className="form-control")
         ]),
-        style={
-            'width': '100%',
-            'height': '60px',
-            'lineHeight': '60px',
-            'borderWidth': '2px',
-            'borderStyle': 'dashed',
-            'borderRadius': '10px',
-            'textAlign': 'center',
-            'marginBottom': '20px'
-        },
-        multiple=False
-    ),
-    html.Div(id='output-table'),
-    dcc.Graph(id='probability-plot', style={"marginTop": "40px"})
+        dbc.Col([
+            dbc.Label("Monthly Income"),
+            dcc.Input(id="input-income", type="number", placeholder="e.g. 5000", className="form-control")
+        ]),
+        dbc.Col([
+            dbc.Label("Job Role"),
+            dcc.Dropdown(
+                id="input-role",
+                options=[
+                    {"label": "Sales Executive", "value": "Sales Executive"},
+                    {"label": "Research Scientist", "value": "Research Scientist"},
+                    {"label": "Laboratory Technician", "value": "Laboratory Technician"},
+                    # Add all job roles seen during training
+                ],
+                placeholder="Select Job Role"
+            )
+        ])
+    ], className="mb-3"),
+
+    dbc.Row([
+        dbc.Col([
+            dbc.Label("Years at Company"),
+            dcc.Input(id="input-years", type="number", placeholder="e.g. 5", className="form-control")
+        ]),
+        dbc.Col([
+            dbc.Label("OverTime"),
+            dcc.Dropdown(
+                id="input-overtime",
+                options=[
+                    {"label": "Yes", "value": "Yes"},
+                    {"label": "No", "value": "No"}
+                ],
+                placeholder="Select OverTime Status"
+            )
+        ])
+    ], className="mb-3"),
+
+    dbc.Button("Predict", id="predict-btn", color="primary", className="mb-4"),
+
+    html.Div(id="prediction-output", className="fs-4 fw-bold")
 ], fluid=True)
 
-def parse_data(contents, filename):
-    content_type, content_string = contents.split(',')
-    decoded = base64.b64decode(content_string)
-    if 'csv' in filename:
-        df = pd.read_csv(io.StringIO(decoded.decode('utf-8')))
-    else:
-        return None
-    return df
-
-def make_predictions(df):
-    df = df[trained_features]
-    df_scaled = scaler.transform(df)
-    preds = model.predict(df_scaled)
-    probs = model.predict_proba(df_scaled)[:, 1]
-    df['Predicted_Attrition'] = preds
-    df['Probability_Yes'] = probs
-    return df
-
+# Callback
 @app.callback(
-    Output('output-table', 'children'),
-    Output('probability-plot', 'figure'),
-    Input('upload-data', 'contents'),
-    State('upload-data', 'filename')
+    Output("prediction-output", "children"),
+    Input("predict-btn", "n_clicks"),
+    State("input-age", "value"),
+    State("input-income", "value"),
+    State("input-role", "value"),
+    State("input-years", "value"),
+    State("input-overtime", "value")
 )
-def update_output(contents, filename):
-    if contents is not None:
-        df = parse_data(contents, filename)
-        if df is not None:
-            df_pred = make_predictions(df)
-            table = dash_table.DataTable(
-                columns=[{"name": i, "id": i} for i in df_pred.columns],
-                data=df_pred.to_dict('records'),
-                page_size=10,
-                style_table={'overflowX': 'auto'},
-                style_cell={'textAlign': 'left'},
-                style_header={'fontWeight': 'bold'}
-            )
-            fig = px.histogram(df_pred, x="Probability_Yes", nbins=20,
-                               title="Predicted Probability of Attrition",
-                               labels={"Probability_Yes": "Attrition Probability"})
-            fig.add_vline(x=0.5, line_dash="dash", line_color="red")
-            return table, fig
-    return html.Div(), {}
+def predict_attrition(n_clicks, age, income, role, years, overtime):
+    if not n_clicks:
+        return ""
+    try:
+        # Manual encoding for categorical features (make sure it matches training preprocessing)
+        role_map = {
+            "Sales Executive": 0,
+            "Research Scientist": 1,
+            "Laboratory Technician": 2,
+            # Continue based on training
+        }
+        overtime_map = {"No": 0, "Yes": 1}
 
-if __name__ == '__main__':
+        data = pd.DataFrame([[
+            age,
+            income,
+            role_map.get(role, 0),
+            years,
+            overtime_map.get(overtime, 0)
+        ]], columns=["Age", "MonthlyIncome", "JobRole", "YearsAtCompany", "OverTime"])
+
+        data_scaled = scaler.transform(data)
+        prediction = model.predict(data_scaled)[0]
+        prob = model.predict_proba(data_scaled)[0][1]
+
+        if prediction == 1:
+            return f"⚠️ Attrition Likely (Confidence: {prob:.2%})"
+        else:
+            return f"✅ Employee Likely to Stay (Confidence: {1 - prob:.2%})"
+
+    except Exception as e:
+        return f"Error during prediction: {str(e)}"
+        
+@app.callback(
+    Output("prediction-output", "children"),
+    Output("prediction-graph", "figure"),
+    Input("predict-btn", "n_clicks"),
+    State("input-age", "value"),
+    State("input-income", "value"),
+    State("input-role", "value"),
+    State("input-years", "value"),
+    State("input-overtime", "value")
+)
+def predict_attrition(n_clicks, age, income, role, years, overtime):
+    if not n_clicks or ctx.triggered_id != "predict-btn":
+        return "", go.Figure()
+
+    try:
+        # Manual encoding for categorical features
+        role_map = {
+            "Sales Executive": 0,
+            "Research Scientist": 1,
+            "Laboratory Technician": 2,
+            # Add others as needed
+        }
+        overtime_map = {"No": 0, "Yes": 1}
+
+        data = pd.DataFrame([[
+            age,
+            income,
+            role_map.get(role, 0),
+            years,
+            overtime_map.get(overtime, 0)
+        ]], columns=["Age", "MonthlyIncome", "JobRole", "YearsAtCompany", "OverTime"])
+
+        data_scaled = scaler.transform(data)
+        prediction = model.predict(data_scaled)[0]
+        prob = model.predict_proba(data_scaled)[0]
+
+        message = (
+            f"⚠️ Attrition Likely (Confidence: {prob[1]:.2%})"
+            if prediction == 1
+            else f"✅ Employee Likely to Stay (Confidence: {prob[0]:.2%})"
+        )
+
+        # Visualization
+        fig = go.Figure(
+            data=[
+                go.Bar(x=["No Attrition", "Attrition"], y=[prob[0], prob[1]], marker_color=["green", "red"])
+            ]
+        )
+        fig.update_layout(
+            title="Prediction Confidence",
+            yaxis=dict(title="Probability"),
+            xaxis=dict(title="Outcome"),
+            height=400
+        )
+
+        return message, fig
+
+    except Exception as e:
+        return f"Error during prediction: {str(e)}", go.Figure()
+        
+# Run the app
+if __name__ == "__main__":
     app.run_server(debug=True)
