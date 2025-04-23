@@ -15,6 +15,7 @@ trained_features = feature_importance_df["Feature"].tolist()
 
 # Dash app setup
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server
 app.title = "Employee Attrition Prediction"
 
 app.layout = dbc.Container([
