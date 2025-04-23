@@ -74,4 +74,6 @@ Logistic Regression tuned using GridSearchCV
 Extraction and visualization of top features influencing attrition
 
 💾 Model Persistence
-Saving trained model, scaler, and prediction outputs for reuse
+Saving trained model, scaler, and prediction outputs for reuse                                                         
+
+Dash App: https://employee-attrition-prediction-9cwl.onrender.com
